@@ -1,0 +1,16 @@
+# PiCamPro — Python dependencies
+# Install on Raspberry Pi:
+#   pip install -r requirements.txt
+# Or use the install.sh script for full system-level setup.
+
+# Core image processing
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# NOTE: picamera2 must be installed via apt on Raspberry Pi:
+#   sudo apt install python3-picamera2
+# It is NOT available on PyPI for x86/non-Pi systems.
+
+# Optional: for MP4 muxing fallback (usually pre-installed on Raspberry Pi OS)
+# ffmpeg  ← install via:  sudo apt install ffmpeg
