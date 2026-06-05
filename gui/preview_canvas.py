@@ -50,6 +50,7 @@ class PreviewCanvas(tk.Frame):
         self._bg_colour = bg_colour
         self._frame_queue: queue.Queue = queue.Queue(maxsize=4)
         self._current_photo: Optional[ImageTk.PhotoImage] = None
+        self._image_id: Optional[int] = None
         self._zoom: float = 1.0
         self._target_fps: int = 30
         self._recording: bool = False
@@ -216,5 +217,8 @@ class PreviewCanvas(tk.Frame):
             if rgb_img.shape[2] == 3 else rgb_img
         )
         photo = ImageTk.PhotoImage(image=pil_img)
-        self._canvas.create_image(0, 0, anchor=tk.NW, image=photo)
+        if self._image_id is None:
+            self._image_id = self._canvas.create_image(0, 0, anchor=tk.NW, image=photo)
+        else:
+            self._canvas.itemconfig(self._image_id, image=photo)
         self._current_photo = photo   # keep reference alive
