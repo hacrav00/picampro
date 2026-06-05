@@ -36,6 +36,11 @@ from gui.settings_dialog  import SettingsDialog
 
 log = logging.getLogger(__name__)
 
+try:
+    from libcamera import controls
+except ImportError:
+    controls = None
+
 # ── Theme colours ────────────────────────────────────────────────────────────
 C_BG     = "#0d1117"
 C_PANEL  = "#161b22"
@@ -76,6 +81,9 @@ class AppWindow:
         self._current_res: Tuple[int, int]   = (1280, 720)
         self._target_fps: int                = 30
         self._snap_format: str               = "jpg"
+        self._focus_mode: str                = "continuous"
+        self._lens_position: float           = 0.0
+        self._focus_supported: bool          = False
 
         # Engines
         self._recorder:  Optional[Recorder]          = None
@@ -153,6 +161,9 @@ class AppWindow:
             on_timelapse_toggle          = self._on_timelapse_toggle,
             on_timelapse_interval_change = self._on_interval_change,
             on_refresh_cameras           = self._async_scan_cameras,
+            on_focus_mode_change         = self._on_focus_mode_change,
+            on_lens_position_change      = self._on_lens_position_change,
+            on_trigger_focus             = self._on_trigger_focus,
         )
         self._panel.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -230,6 +241,40 @@ class AppWindow:
     def _on_zoom_change(self, zoom: float):
         self._preview.set_zoom(zoom)
 
+    def _on_focus_mode_change(self, mode: str):
+        self._focus_mode = mode
+        log.info("Focus mode changed to: %s", mode)
+        self._apply_focus_controls()
+
+    def _on_lens_position_change(self, pos: float):
+        self._lens_position = pos
+        log.debug("Lens position changed to: %.1f", pos)
+        self._apply_focus_controls()
+
+    def _on_trigger_focus(self):
+        log.info("Autofocus cycle triggered manually.")
+        if self._picam2 is not None and controls is not None:
+            try:
+                self._picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            except Exception as e:
+                log.error("Failed to trigger autofocus: %s", e)
+
+    def _apply_focus_controls(self):
+        if self._picam2 is None or controls is None or not self._focus_supported:
+            return
+        try:
+            if self._focus_mode == "continuous":
+                self._picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+            elif self._focus_mode == "auto":
+                self._picam2.set_controls({"AfMode": controls.AfModeEnum.Auto})
+            elif self._focus_mode == "manual":
+                self._picam2.set_controls({
+                    "AfMode": controls.AfModeEnum.Manual,
+                    "LensPosition": float(self._lens_position)
+                })
+        except Exception as e:
+            log.warning("Could not apply focus controls: %s", e)
+
     # ──────────────────────────────────────────────────────────────────
     # Capture thread
     # ──────────────────────────────────────────────────────────────────
@@ -292,6 +337,15 @@ class AppWindow:
             picam2.start()
             self._picam2 = picam2
 
+            # Check for focus control support
+            self._focus_supported = "LensPosition" in picam2.camera_controls
+            log.info("Focus controls supported: %s", self._focus_supported)
+            self._root.after(0, lambda: self._panel.set_focus_supported(self._focus_supported))
+
+            if self._focus_supported:
+                # Apply initial focus controls (e.g. continuous autofocus on startup)
+                self._apply_focus_controls()
+
             # Inject into recorder & snapshooter
             if self._recorder:
                 self._recorder.attach_picam2(picam2)
@@ -324,6 +378,9 @@ class AppWindow:
 
     def _v4l2_loop(self):
         """Background thread: read frames from a V4L2 / USB camera."""
+        self._focus_supported = False
+        self._root.after(0, lambda: self._panel.set_focus_supported(False))
+
         cam = self._active_cam
         if cam is None:
             return
