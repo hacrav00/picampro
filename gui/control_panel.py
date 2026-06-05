@@ -85,6 +85,9 @@ class ControlPanel(tk.Frame):
                  on_timelapse_toggle: Callable[[], None],
                  on_timelapse_interval_change: Callable[[float], None],
                  on_refresh_cameras: Callable[[], None],
+                 on_focus_mode_change: Callable[[str], None],
+                 on_lens_position_change: Callable[[float], None],
+                 on_trigger_focus: Callable[[], None],
                  **kwargs):
         super().__init__(parent, bg=C_PANEL, width=290, **kwargs)
         self.pack_propagate(False)
@@ -99,6 +102,9 @@ class ControlPanel(tk.Frame):
         self._on_timelapse_toggle   = on_timelapse_toggle
         self._on_interval_change    = on_timelapse_interval_change
         self._on_refresh            = on_refresh_cameras
+        self._on_focus_mode_change  = on_focus_mode_change
+        self._on_lens_position_change = on_lens_position_change
+        self._on_trigger_focus      = on_trigger_focus
 
         # State
         self._cameras: List["CameraInfo"] = []
@@ -112,6 +118,8 @@ class ControlPanel(tk.Frame):
         self._fps_var     = tk.IntVar(value=30)
         self._zoom_var    = tk.DoubleVar(value=1.0)
         self._tl_interval = tk.DoubleVar(value=5.0)
+        self._focus_mode_var = tk.StringVar(value="continuous")
+        self._lens_pos_var   = tk.DoubleVar(value=0.0)
 
         self._build_ui()
 
@@ -227,7 +235,52 @@ class ControlPanel(tk.Frame):
         )
         self._zoom_val_lbl.pack(side=tk.LEFT)
 
-        _separator(inner).pack(fill=tk.X, padx=14, pady=6)
+        self._zoom_sep = _separator(inner)
+        self._zoom_sep.pack(fill=tk.X, padx=14, pady=6)
+
+        # ── Focus Area Frame (collapsible) ──
+        self._focus_area_frame = tk.Frame(inner, bg=C_PANEL)
+        self._focus_area_frame.pack(fill=tk.X)
+
+        self._build_section(self._focus_area_frame, "Focus Control")
+
+        # Focus Mode Dropdown
+        self._focus_mode_combo = ttk.Combobox(
+            self._focus_area_frame, textvariable=self._focus_mode_var,
+            state="readonly", values=["Continuous", "Auto (Trigger)", "Manual"],
+            font=FONT_LABEL
+        )
+        self._focus_mode_combo.pack(fill=tk.X, padx=14, pady=4)
+        self._focus_mode_combo.bind("<<ComboboxSelected>>", self._on_focus_mode_selected)
+
+        # Focus Trigger Button (Auto mode)
+        self._focus_trigger_btn = _make_button(
+            self._focus_area_frame, "🔍 Trigger Focus", self._on_trigger_focus_click,
+            bg=C_BTN, fg=C_TEXT
+        )
+
+        # Manual Focus Slider Frame
+        self._lens_pos_frame = tk.Frame(self._focus_area_frame, bg=C_PANEL)
+        self._lens_pos_slider = tk.Scale(
+            self._lens_pos_frame, from_=0.0, to=12.0, resolution=0.1,
+            orient=tk.HORIZONTAL, variable=self._lens_pos_var,
+            bg=C_PANEL, fg=C_TEXT, troughcolor=C_BTN,
+            highlightthickness=0, activebackground=C_ACCENT,
+            font=FONT_LABEL, showvalue=False,
+            command=self._on_lens_pos_moved
+        )
+        self._lens_pos_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._lens_pos_val_lbl = tk.Label(
+            self._lens_pos_frame, text="0.0",
+            bg=C_PANEL, fg=C_ACCENT, font=FONT_VALUE, width=5
+        )
+        self._lens_pos_val_lbl.pack(side=tk.LEFT)
+
+        # Separator inside focus area
+        self._focus_sep = _separator(self._focus_area_frame)
+        self._focus_sep.pack(fill=tk.X, padx=14, pady=6)
+
+        self._update_focus_ui()
 
         # ── Record / Snapshot ──
         self._build_section(inner, "Capture")
@@ -427,3 +480,38 @@ class ControlPanel(tk.Frame):
             self._on_interval_change(v)
         except Exception:
             pass
+
+    def _on_focus_mode_selected(self, _event=None):
+        mode = self._focus_mode_var.get().lower()
+        if "continuous" in mode:
+            mode = "continuous"
+        elif "auto" in mode:
+            mode = "auto"
+        elif "manual" in mode:
+            mode = "manual"
+        self._update_focus_ui()
+        self._on_focus_mode_change(mode)
+
+    def _on_trigger_focus_click(self):
+        self._on_trigger_focus()
+
+    def _on_lens_pos_moved(self, val):
+        pos = round(float(val), 1)
+        self._lens_pos_val_lbl.config(text=f"{pos:.1f}")
+        self._on_lens_position_change(pos)
+
+    def _update_focus_ui(self):
+        self._focus_trigger_btn.pack_forget()
+        self._lens_pos_frame.pack_forget()
+
+        mode = self._focus_mode_var.get()
+        if mode == "Auto (Trigger)":
+            self._focus_trigger_btn.pack(fill=tk.X, padx=14, pady=4)
+        elif mode == "Manual":
+            self._lens_pos_frame.pack(fill=tk.X, padx=14, pady=4)
+
+    def set_focus_supported(self, supported: bool):
+        if supported:
+            self._focus_area_frame.pack(fill=tk.X, after=self._zoom_sep)
+        else:
+            self._focus_area_frame.pack_forget()
