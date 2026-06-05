@@ -9,14 +9,22 @@ OWNER = "hacrav00"
 REPO = "picampro"
 BRANCH = "main"
 
-FILES_TO_UPLOAD = [
-    "core/camera_manager.py",
-    "gui/control_panel.py",
-    "gui/app_window.py",
-    "gui/preview_canvas.py",
-    "assets/icon.png",
-    "upload_to_github.py",
-]
+def get_all_files():
+    ignored_dirs = {".git", "__pycache__", "captures", "logs", ".idea", ".vscode", "brain", ".system_generated"}
+    ignored_files = {".DS_Store"}
+    files = []
+    for root, dirs, filenames in os.walk("."):
+        # filter out ignored directories
+        dirs[:] = [d for d in dirs if d not in ignored_dirs]
+        for filename in filenames:
+            if filename in ignored_files:
+                continue
+            rel_path = os.path.relpath(os.path.join(root, filename), ".")
+            rel_path = rel_path.replace("\\", "/")
+            if rel_path != "upload_to_github.py":
+                files.append(rel_path)
+    files.append("upload_to_github.py")
+    return sorted(files)
 
 def get_sha(path, token):
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{path}?ref={BRANCH}"
@@ -81,7 +89,9 @@ def main():
         print("Token cannot be empty.")
         return
 
-    for path in FILES_TO_UPLOAD:
+    files = get_all_files()
+    print(f"Found {len(files)} files to upload.\n")
+    for path in files:
         print(f"Uploading {path}...")
         try:
             upload_file(path, token)
