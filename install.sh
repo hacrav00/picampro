@@ -14,7 +14,7 @@ CYAN="\033[36m"
 RESET="\033[0m"
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STORAGE_DIR="/home/pi/PiCamPro"
+STORAGE_DIR="$HOME/PiCamPro"
 
 echo -e "${CYAN}${BOLD}"
 echo "  ╔═══════════════════════════════════════╗"
@@ -62,12 +62,19 @@ PACKAGES=(
     xdg-utils
 )
 
-# picamera2 is only available on Bookworm+ via apt
-if [[ "$OS_VERSION" == "bookworm" || "$OS_VERSION" == "bullseye" ]]; then
-    PACKAGES+=(python3-picamera2)
-    echo -e "  ${CYAN}ℹ picamera2 will be installed (CSI camera support enabled)${RESET}"
+# picamera2: available on Bookworm, Bullseye, and Trixie (Raspberry Pi OS)
+if [[ "$OS_VERSION" == "bookworm" || "$OS_VERSION" == "bullseye" || "$OS_VERSION" == "trixie" ]]; then
+    # Try apt first
+    if apt-cache show python3-picamera2 &>/dev/null; then
+        PACKAGES+=(python3-picamera2)
+        echo -e "  ${CYAN}i picamera2 will be installed via apt (CSI camera support enabled)${RESET}"
+    else
+        # Fall back to pip for trixie / non-standard repos
+        echo -e "  ${YELLOW}picamera2 not in apt — will try pip install${RESET}"
+        INSTALL_PICAM2_PIP=1
+    fi
 else
-    echo -e "  ${YELLOW}⚠ picamera2 not available for $OS_VERSION — only USB cameras supported${RESET}"
+    echo -e "  ${YELLOW}picamera2 not available for $OS_VERSION — only USB cameras supported${RESET}"
 fi
 
 # OpenCV: try apt first (faster), fall back to pip
@@ -79,6 +86,14 @@ else
 fi
 
 sudo apt-get install -y "${PACKAGES[@]}" 2>&1 | grep -E "(Installed|already|Error)" || true
+
+# picamera2 via pip if apt didn't have it
+if [ "${INSTALL_PICAM2_PIP:-0}" = "1" ]; then
+    echo -e "${BOLD}Installing picamera2 via pip...${RESET}"
+    pip3 install --break-system-packages picamera2 2>/dev/null \
+        || pip3 install picamera2 \
+        || echo -e "  ${YELLOW}picamera2 pip install failed — CSI cameras may not work${RESET}"
+fi
 
 # OpenCV via pip if needed
 if [ "${INSTALL_CV2_PIP:-0}" = "1" ]; then
