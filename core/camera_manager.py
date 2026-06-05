@@ -113,6 +113,7 @@ def _detect_libcamera_cameras() -> List[CameraInfo]:
     #       Modes: 'SRGGB10_CSI2P' : 1536x864 [120.13 fps] ...
     # -----------------------------------------------------------------------
     current_cam: Optional[CameraInfo] = None
+    current_fmt = "UNKNOWN"
 
     for line in raw.splitlines():
         # Camera header line: "0 : imx708 [4608x2592 ...]"
@@ -131,24 +132,41 @@ def _detect_libcamera_cameras() -> List[CameraInfo]:
                 max_height=h_max,
             )
             cameras.append(current_cam)
+            current_fmt = "UNKNOWN"
             continue
 
-        # Mode lines: "'SRGGB10_CSI2P' : 1536x864 [120.13 fps - 13.33 fps]"
         if current_cam:
-            mode_match = re.search(
+            # Check for a line starting a new format group:
+            # e.g., "    Modes: 'SRGGB10_CSI2P' : 1536x864 [120.13 fps]"
+            mode_format_match = re.search(
                 r"'([^']+)'\s*:\s*(\d+)x(\d+)\s*\[([0-9.]+)\s*fps\s*(?:-\s*([0-9.]+)\s*fps)?",
                 line,
             )
-            if mode_match:
-                fmt      = mode_match.group(1)
-                mw       = int(mode_match.group(2))
-                mh       = int(mode_match.group(3))
-                fps_max  = float(mode_match.group(4))
-                fps_min  = float(mode_match.group(5)) if mode_match.group(5) else 1.0
-                current_cam.modes.append(SensorMode(mw, mh, fps_max, fps_min, fmt))
+            if mode_format_match:
+                current_fmt = mode_format_match.group(1)
+                mw       = int(mode_format_match.group(2))
+                mh       = int(mode_format_match.group(3))
+                fps_max  = float(mode_format_match.group(4))
+                fps_min  = float(mode_format_match.group(5)) if mode_format_match.group(5) else 1.0
+                current_cam.modes.append(SensorMode(mw, mh, fps_max, fps_min, current_fmt))
                 current_cam.max_fps = max(current_cam.max_fps, fps_max)
-                if "RAW" in fmt.upper() or "DNG" in fmt.upper():
+                if "RAW" in current_fmt.upper() or "DNG" in current_fmt.upper():
                     current_cam.supports_raw = True
+                continue
+
+            # Check for a line continuing the current format group:
+            # e.g., "                             1536x864 [120.13 fps]"
+            mode_continue_match = re.search(
+                r"^\s*(\d+)x(\d+)\s*\[([0-9.]+)\s*fps\s*(?:-\s*([0-9.]+)\s*fps)?",
+                line,
+            )
+            if mode_continue_match:
+                mw       = int(mode_continue_match.group(1))
+                mh       = int(mode_continue_match.group(2))
+                fps_max  = float(mode_continue_match.group(3))
+                fps_min  = float(mode_continue_match.group(4)) if mode_continue_match.group(4) else 1.0
+                current_cam.modes.append(SensorMode(mw, mh, fps_max, fps_min, current_fmt))
+                current_cam.max_fps = max(current_cam.max_fps, fps_max)
 
     # Ensure each camera has at least its max resolution as a mode
     for cam in cameras:
