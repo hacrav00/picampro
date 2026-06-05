@@ -74,7 +74,8 @@ def _check_dependencies() -> bool:
     # Picamera2 is optional (falls back to pure V4L2 for USB cameras)
     try:
         import picamera2
-        log.info("picamera2 %s detected — CSI cameras supported.", picamera2.__version__)
+        _pc2_ver = getattr(picamera2, "__version__", "installed")
+        log.info("picamera2 %s detected — CSI cameras supported.", _pc2_ver)
     except ImportError:
         log.info("picamera2 not available — CSI camera support disabled. "
                  "USB cameras will still work via V4L2.")
