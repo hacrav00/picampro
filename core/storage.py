@@ -15,13 +15,14 @@ from typing import Tuple
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Base paths
+# Base paths — uses the ACTUAL logged-in user's home directory
+# Works for any username (pi, i4mt, ubuntu, etc.)
 # ---------------------------------------------------------------------------
-BASE_DIR     = Path("/home/pi/PiCamPro")
-PHOTO_DIR    = BASE_DIR / "captures" / "photos"
-VIDEO_DIR    = BASE_DIR / "captures" / "videos"
+BASE_DIR      = Path.home() / "PiCamPro"
+PHOTO_DIR     = BASE_DIR / "captures" / "photos"
+VIDEO_DIR     = BASE_DIR / "captures" / "videos"
 TIMELAPSE_DIR = BASE_DIR / "captures" / "timelapse"
-LOG_DIR      = BASE_DIR / "logs"
+LOG_DIR       = BASE_DIR / "logs"
 
 ALL_DIRS = [PHOTO_DIR, VIDEO_DIR, TIMELAPSE_DIR, LOG_DIR]
 
